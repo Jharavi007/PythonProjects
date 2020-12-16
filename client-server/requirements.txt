@@ -1,0 +1,6 @@
+paho-mqtt
+flask
+requests
+urllib3
+tinydb
+schedule
