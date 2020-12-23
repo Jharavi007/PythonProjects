@@ -6,15 +6,18 @@ from flask import Flask, request
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-import paho.mqtt.client as mqtt
+#import paho.mqtt.client as mqtt
 import time as ts
 import random
 import datetime
 import json
 import csv
+from healthcheck import HealthCheck
 
 app = Flask(__name__)
 warnings.filterwarnings('ignore')
+health = HealthCheck()
+
 
 logging.basicConfig(filename="server.log", format="%(asctime)s %(message)s", filemode="a+")
 logger=logging.getLogger()
@@ -115,19 +118,7 @@ def upload():
         logger.debug("Exception occured in server as:",e)
         return 'faliure'
 
-@app.errorhandler(500)
-def internal_error(error):
-    utc_datetime = datetime.datetime.utcnow()
-    utc_datetime = utc_datetime.strftime("%Y-%m-%d %H:%M:%SZ")
-    error_500 = json.dumps({
-        'timestamp': utc_datetime,
-        'error': error.code,
-        'error status': repr(error),
-        'Message': 'Given key may be invalid.Possible values are [dataKeys:[FlowRate],consumptionDataKeys:[WaterConsumptionReadings, WaterConsumption]',
-        'path': '/sendData'
-    })
-    logger.error(error_500)
-    return 'faliure'
+app.add_url_rule("/healthcheck", "healthcheck", view_func=lambda: health.run())
 
 @app.errorhandler(404)
 def not_found(error):
