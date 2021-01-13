@@ -10,114 +10,123 @@ import redis
 from logging.handlers import RotatingFileHandler
 from tinydb import TinyDB, Query
 import threading
-import traceback
+import traceback, signal
 
-lock = threading.Lock()
-red = redis.Redis(host='localhost', port=6379, db=0)
-red.flushdb()
-db = TinyDB('offlineDB.json')
-red.set("success_count",0)
-red.set("buffer_count",0)
-localurl = "http://127.0.0.1:5001/sendData?"
+class EdgeFunctions:
+    def __init__(self):
+        CONSTANT_DICTIONARY = {}
+        CONSTANT_DICTIONARY['LAST_AVERAGE'] = 30
+        CONSTANT_DICTIONARY['AVERAGE_DATA_COUNT'] = 7
+        CONSTANT_DICTIONARY['SEND_URL'] = "http://127.0.0.1:5001/sendData?"
+        CONSTANT_DICTIONARY['LOCAL_DB'] = TinyDB('offlineDB.json')
+        self.CONSTANT_DICTIONARY = CONSTANT_DICTIONARY
+        self.red = redis.Redis(host='localhost', port=6379, db=0)
+        self.red.set("success_count",0)
+        self.logger = logging_enable()
 
-logging.basicConfig(filename="client.log", format="%(asctime)s %(message)s", filemode="a+")
-logger=logging.getLogger()
-logger.setLevel(logging.DEBUG)
-log_formatter = logging.Formatter("%(asctime)s %(message)s")
-handler = RotatingFileHandler("client.log", mode="a+", maxBytes=100*1024*1024, backupCount=1, encoding=None, delay=0)
-handler.setFormatter(log_formatter)
-handler.setLevel(logging.DEBUG)
-logger.addHandler(handler)
-
-def constructJson():
-    data = {}
-    data["value"]=str(round(random.uniform(30.5, 39.5),2))
-    data["sensor"]="Sensor-"+str(random.randint(1,5))
-    return data
-
-def logdata_save(data):
-    #global db, red
-    db.insert(data)
-    red.set('buffer_count',int(red.get("success_count").decode("utf-8"))+1)
-    logger.info("saved buffered data:{0}".format(data))
-    print("saved buffered data:{0}".format(data))
-
-def logdata_read():
-    #global db, localurl, red
-    if not (db.all() == []):
-        el = db.all()[0]
-        ID = el.doc_id
-    else:
-        return False
-    for i in range(0,len(db)):
-        element = db.get(doc_id=ID+i)
-        encoded = urllib.parse.urlencode(element)
-        final=str(localurl+encoded)
+    def calculate_average(self,current_value):
         try:
-            r=requests.get(final)
-            result = [r.text, r.status_code]
-            if result[0] == "success":
-                red.set('success_count',int(red.get("success_count").decode("utf-8"))+1)
-                db.remove(doc_ids=[ID+i])
-                red.set('buffer_count',int(red.get("success_count").decode("utf-8"))-1)
-                logger.info("sent buffered data:{0}".format(element))
-                print("sent buffered data:{0}".format(element))
-                time.sleep(5) #SEND BUFFERED DATA EVERY 5 SECONDS.
+            last_average = float(self.red.get('last_average').decode("utf-8"))
         except:
-            break
+            last_average = self.CONSTANT_DICTIONARY.get('LAST_AVERAGE')
+        n = self.CONSTANT_DICTIONARY.get('AVERAGE_DATA_COUNT')
+        current_average = ((n-1)*last_average + current_value)/n
+        return current_average
 
-def  message_count():
-    #global red
-    messageCount = {}
-    messageCount['Transmitted Messages'] = int(red.get("success_count").decode("utf-8"))
-    messageCount['Buffered Messages'] = int(red.get("buffer_count").decode("utf-8"))
-    return messageCount
+    def bufferData_save(self,data):
+        self.CONSTANT_DICTIONARY['LOCAL_DB'].insert(data)
+        self.logger.info("saving data %s to buffer"%data)
+        return
 
-def edge_program():
-    #global red, localurl
-    params = constructJson()
-    encoded = urllib.parse.urlencode(params)
-    final=str(localurl+encoded)
-    try:
-        r=requests.get(final)
-        result = [r.text, r.status_code]
-        if result[0] == "success":
-            red.set('success_count',int(red.get("success_count").decode("utf-8"))+1)
-            logger.info("sent live data:{0}".format(params))
-            print("sent live data:{0}".format(params))
-        else:
-            logdata_save(params)
-    except:
-        logdata_save(params)
-
-def every(task, delay):
-    next_time = time.time() + delay
-    while True:
+    def stimulate_data(self):
+        data = {}
+        data["value"]=float(round(random.uniform(30.5, 39.5),2))
+        return data
+    
+    def data_send(self, data):
         try:
-            task()
-        except Exception:
-            traceback.print_exc()
-        time.sleep(max(0, next_time - time.time()))
-        next_time += (time.time() - next_time) // delay * delay + delay
+            data_encoded = urllib.parse.urlencode(data)
+            final_url = str(self.CONSTANT_DICTIONARY.get('SEND_URL')+ data_encoded)
+            r=requests.get(final_url)
+            result = str(r.text)
+        except:
+            result = 'faliure'
+        return result
+    
+    def live_thread(self):
+        print("running live thread")
+        self.logger.info("running live thread")
+        data = self.stimulate_data()
+        new_average = self.calculate_average(data["value"])
+        data['average'] = new_average
+        self.red.set('last_average', new_average)
+        self.CONSTANT_DICTIONARY['LAST_AVERAGE'] = new_average
+        result = self.data_send(data)
+        if result == 'success':
+            self.red.set('success_count',int(self.red.get("success_count").decode("utf-8"))+1)
+            self.logger.info("sent live data: %s to server"%data)
+        else:
+            self.logger.info("failed to send live data")
+            self.bufferData_save(data)
 
-def conn_check():
-    try:
-        if requests.get("http://localhost:5001/healthcheck").status_code == 200:
-            print(threading.enumerate())
-            logdata_read()
-    except:
-        pass
+    def buffer_thread(self):
+        print("running buffer thread")
+        self.logger.info("running buffer thread")
+        db = self.CONSTANT_DICTIONARY['LOCAL_DB']
+        if not (db.all() == []):
+            ID = db.all()[0].doc_id
+            data = db.get(doc_id=ID)
+            result = self.data_send(data)
+            if result == 'success':
+                db.remove(doc_ids=[ID])
+                self.red.set('success_count',int(self.red.get("success_count").decode("utf-8"))+1)
+                self.logger.info("sent buffer data: %s to server"%data)
+            else:
+                self.logger.info("failed to send buffer data")
+        else:
+            self.logger.info("no buffer data found")
+
+def every(delay=0,task=None, run_event=None):
+    next_time = time.time() + delay
+    while run_event.is_set():
+        task()
+        time.sleep(max(0, next_time - time.time()))
+        next_time += (time.time() - next_time) // delay * delay + delay 
+
+def logging_enable():
+    logging.basicConfig(filename="client.log", format="%(asctime)s %(message)s", filemode="a+")
+    logger=logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    log_formatter = logging.Formatter("%(asctime)s %(message)s")
+    handler = RotatingFileHandler("client.log", mode="a+", maxBytes=100*1024*1024, backupCount=1, encoding=None, delay=0)
+    handler.setFormatter(log_formatter)
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    return logger
 
 def main():
+    run_event = threading.Event()
+    run_event.set()
+    d1=6
+    t1 = threading.Thread(name='LiveThread60', target= every, kwargs = dict(delay=d1, task=EdgeFunctions().live_thread, run_event=run_event))
+    d2=3
+    t2 = threading.Thread(name='BufferData30', target= every, kwargs= dict(delay=d2, task=EdgeFunctions().buffer_thread, run_event=run_event))
+    t1.start()
+    time.sleep(0.5)
+    t2.start()
     try:
-        main_thread = threading.Thread(target=lambda:every(edge_program,10))
-        buffer_thread = threading.Thread(target=lambda:every(conn_check,10))
-        main_thread.start()
-        buffer_thread.start()
+        while 1:
+            time.sleep(.1)
     except KeyboardInterrupt:
-        exit(0)
-#    main_thread.join()
-#    buffer_thread.join()
+        EdgeFunctions().red.flushdb()    #if only you want to reset last average and message count values.
+        try:
+            print ("attempting to close threads. Max wait =",max(d1,d2))
+            run_event.clear()
+            t1.join()
+            t2.join()
+            print ("threads successfully closed")
+        except:
+            sys.exit(0)
 
-if __name__=="__main__":
+if __name__=='__main__':
     main()

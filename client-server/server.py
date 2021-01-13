@@ -6,18 +6,13 @@ from flask import Flask, request
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-#import paho.mqtt.client as mqtt
-import time as ts
 import random
 import datetime
 import json
 import csv
-from healthcheck import HealthCheck
 
 app = Flask(__name__)
 warnings.filterwarnings('ignore')
-health = HealthCheck()
-
 
 logging.basicConfig(filename="server.log", format="%(asctime)s %(message)s", filemode="a+")
 logger=logging.getLogger()
@@ -28,51 +23,11 @@ handler.setFormatter(log_formatter)
 handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
-#COMMENTED CODEBLOCK BELOW CAN BE UNCOMMENTED,
-#TO SEND DATA FROM THIS MIDDLEWARE SOFTWARE TO CLOUD FINALLY.
-'''
-def on_connect(mqttc, userdata, flags, rc):
-    print('connected to MQTT server')
-    logger.debug("connected to MQTT server")
-
-def on_disconnect(mqttc, userdata, rc):
-    print('Disconnected From MQTT server')
-    logger.debug("Disconnected to MQTT server")
-
-def on_publish(mqttc,userdata,result):
-    print("data published and result is", result)
-    logger.debug("data published")
-
-def sendData(jsonVal,deviceID,deviceKey,endpoint,channel):
-    try:
-        mqttc=mqtt.Client('test001')
-        mqttc.on_connect = on_connect
-        mqttc.on_disconnect  = on_disconnect
-        mqttc.on_publish = on_publish
-        mqttc.username_pw_set(username=deviceID,password=deviceKey)
-        mqttc.connect(endpoint,1883,60)
-        mqttc.loop_start()
-        ts.sleep(5)
-        messageval= json.dumps(jsonVal)
-        (result,mid)= mqttc.publish(channel,messageval,2)
-        print(result,mid)
-        print("Sent Data: %s"%messageval)
-        logger.debug("Sent Data: %s"%messageval)
-        mqttc.loop_stop()
-        mqttc.disconnect()
-
-    except KeyboardInterrupt:
-            pass
-    except Exception as e:
-            print('Exception occured while sending data')
-            logger.error(e,exc_info=True)
-'''
-
 def constructJson(timestampval):
     data = {}
     data["Timestamp"] = timestampval
-    data["Value"]=str(request.args.get("value"))
-    data["Sensor"]=str(request.args.get("sensor"))
+    data["CurrentValue"]=str(request.args.get("value"))
+    data["AverageValue"]=str(request.args.get("average"))
     return data
 
 def csvSaver(jsondata):
@@ -108,17 +63,13 @@ def upload():
     try:
         logger.debug("RECEIVED REQUEST")
         logger.debug(request.args.get)
-        timestampval=ts.strftime('%Y-%m-%dT%H:%M:%S+05:30')
+        timestampval=time.strftime('%Y-%m-%dT%H:%M:%S+05:30')
         jsonToSend=constructJson(timestampval)
         csvSaver(jsonToSend)
-        #SEND DATA TO CLOUD, FUNCTION CALL. INACTIVE FOR NOW.
-        '''sendData(jsonToSend,"user","pass","broker.mqttdashboard.com","testing123") '''
         return 'success'
     except Exception as e:
-        logger.debug("Exception occured in server as:",e)
+        logger.debug("Exception occured in server as:{}".format(e))
         return 'faliure'
-
-app.add_url_rule("/healthcheck", "healthcheck", view_func=lambda: health.run())
 
 @app.errorhandler(404)
 def not_found(error):
