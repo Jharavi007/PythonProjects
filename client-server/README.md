@@ -6,7 +6,7 @@ The Project Contains two main program,
   1. [client.py](https://github.com/Jharavi007/PythonProjects/blob/main/client-server/client.py) as Edge Program.
   2. [server.py](https://github.com/Jharavi007/PythonProjects/blob/main/client-server/server.py) as HTTP Server Program.
   
- It also contains (./message_count.py) program, which returns the count of successful and buffered messages at any point of time.
+ It also contains [message_count.py](https://github.com/Jharavi007/PythonProjects/blob/main/client-server/message_count.py) program, which returns the count of successful and buffered messages at any point of time.
  
  Running of this whole program can be done by one command:
   __sudo sh [run.sh](https://github.com/Jharavi007/PythonProjects/blob/main/client-server/run.sh)__
