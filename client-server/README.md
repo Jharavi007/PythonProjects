@@ -12,4 +12,4 @@ sudo sh run.sh
 
 Architecture of product is: 
 
-![plot](./![plot](./Jharavi007/PythonProjects/client-server/edge_program.png)
+![plot](./![plot](./edge_program.png)
