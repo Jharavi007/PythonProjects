@@ -9,3 +9,7 @@ The redis_installation.sh file contains the commands to run a local redis based 
 The project can be run at any linux distribution based systems by running the following command in the directory where all other files are lying:-
 
 sudo sh run.sh
+
+Architecture of product is: 
+
+![plot](./![plot](./Jharavi007/PythonProjects/edge_program.io)
