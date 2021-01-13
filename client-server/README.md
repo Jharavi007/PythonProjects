@@ -3,7 +3,7 @@ Working Flow Architecture of This Program is:
 ![WorkFlow Architecture](./edge_program.png)
 
 The Project Contains two main program, 
-  1. (https://github.com/Jharavi007/PythonProjects/blob/main/client-server/client.py) as Edge Program.
+  1. [client.py](https://github.com/Jharavi007/PythonProjects/blob/main/client-server/client.py) as Edge Program.
   2. (https://github.com/Jharavi007/PythonProjects/blob/main/client-server/server.py) as HTTP Server Program.
   
  It also contains (./message_count.py) program, which returns the count of successful and buffered messages at any point of time.
